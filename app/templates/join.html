@@ -1,0 +1,29 @@
+{% extends "patient_base.html" %}
+{% block title %}{{ L.join_title }} · {{ clinic_name }}{% endblock %}
+{% block langswitch %}<button form="joinForm" type="submit" name="switch_lang" value="{{ other_lang }}" formnovalidate>{{ "Español" if lang == "en" else "English" }}</button>{% endblock %}
+{% block content %}
+<form id="joinForm" method="post" action="/c/{{ clinic.slug }}/join" novalidate>
+  <h1 style="font-size:22px;margin:0">{{ L.join_title }}</h1>
+  <p class="hint" style="margin:0">{{ L.join_hint }}</p>
+  {% if error and error[0] == "form" %}<p class="err" role="alert">{{ error[1] }}</p>{% endif %}
+  <div class="field">
+    <label for="name">{{ L.f_name }}</label>
+    <input id="name" name="name" type="text" autocomplete="given-name" maxlength="30" value="{{ form.name }}" {% if error and error[0] == "name" %}aria-invalid="true" aria-describedby="e-name" autofocus{% endif %}>
+    {% if error and error[0] == "name" %}<span id="e-name" class="err" role="alert">{{ error[1] }}</span>{% endif %}
+  </div>
+  <div class="field">
+    <label for="year">{{ L.f_year }}</label>
+    <input id="year" name="year" type="text" inputmode="numeric" maxlength="4" placeholder="2019" value="{{ form.year }}" {% if error and error[0] == "year" %}aria-invalid="true" aria-describedby="e-year" autofocus{% endif %}>
+    {% if error and error[0] == "year" %}<span id="e-year" class="err" role="alert">{{ error[1] }}</span>{% endif %}
+  </div>
+  <div class="field">
+    <label for="phone">{{ L.f_phone }}</label>
+    <input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="(555) 010-4477" value="{{ form.phone }}" {% if error and error[0] == "phone" %}aria-invalid="true" aria-describedby="e-phone" autofocus{% endif %}>
+    {% if error and error[0] == "phone" %}<span id="e-phone" class="err" role="alert">{{ error[1] }}</span>{% endif %}
+  </div>
+  <label class="check" for="consent"><input id="consent" name="consent" type="checkbox" value="1" {% if form.consent %}checked{% endif %}><span>{{ L.consent }}</span></label>
+  {% if error and error[0] == "consent" %}<p class="err" role="alert">{{ error[1] }}</p>{% endif %}
+  <button class="btn fill" type="submit">{{ L.join }}</button>
+  <a class="btn" href="/c/{{ clinic.slug }}">{{ L.back }}</a>
+</form>
+{% endblock %}

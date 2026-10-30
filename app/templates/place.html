@@ -1,0 +1,33 @@
+{% extends "patient_base.html" %}
+{% block refresh %}{% if active and not confirm_leave %}<meta http-equiv="refresh" content="{{ refresh }}">{% endif %}{% endblock %}
+{% block title %}{{ e.line_id }} · {{ clinic_name }}{% endblock %}
+{% block langswitch %}<a href="/q/{{ token }}?lang={{ other_lang }}" hreflang="{{ other_lang }}">{{ "Español" if lang == "en" else "English" }}</a>{% endblock %}
+{% block content %}
+<section class="ticket">
+  <span class="fine">{{ L.your_id }}</span>
+  <span class="qid">{{ e.line_id }}</span>
+  {% if qr %}<div class="qr" role="img" aria-label="{{ L.your_id }} {{ e.line_id }}">{{ qr }}</div><span class="fine">{{ L.show_code }}</span>{% endif %}
+</section>
+<div class="state s-{{ e.status }}" role="status" aria-live="polite">{{ L.status[e.status] }}</div>
+{% if active and e.status != "arrived" %}
+<section class="card primary">
+  <span class="k">{{ L.your_wait }}</span>
+  <span class="v">{{ L.under_ten if est.under_ten else est.lo ~ "–" ~ est.hi }} <small>{{ L.min }}</small></span>
+  {% if position %}<span class="sub">{{ L.position.format(n=position) }}</span>{% endif %}
+</section>
+{% endif %}
+{% if active %}
+  {% if confirm_leave %}
+  <p class="err">{{ L.leave_q }}</p>
+  <div class="row2">
+    <form method="post" action="/q/{{ token }}/leave"><button class="btn danger" type="submit">{{ L.yes_leave }}</button></form>
+    <a class="btn" href="/q/{{ token }}">{{ L.stay }}</a>
+  </div>
+  {% else %}
+  <a class="btn danger" href="/q/{{ token }}?confirm_leave=1">{{ L.leave }}</a>
+  {% endif %}
+{% elif e.status in ("left", "removed") %}
+<a class="btn fill" href="/c/{{ clinic.slug }}/join">{{ L.join_again }}</a>
+{% endif %}
+<p class="fine">{{ L.updated.format(t=now_text) }}</p>
+{% endblock %}

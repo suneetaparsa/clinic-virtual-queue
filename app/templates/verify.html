@@ -1,0 +1,21 @@
+{% extends "patient_base.html" %}
+{% block title %}{{ L.v_title }} · {{ clinic_name }}{% endblock %}
+{% block langswitch %}{% endblock %}
+{% block content %}
+<form method="post" action="/c/{{ clinic.slug }}/verify/{{ otc.public_id }}" novalidate>
+  <h1 style="font-size:22px;margin:0">{{ L.v_title }}</h1>
+  <p style="margin:0">{{ L.v_body.format(masked=masked) }}</p>
+  <div class="field">
+    <label for="code">{{ L.f_code }}</label>
+    <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="4" autofocus
+      style="font:700 30px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.4em;text-align:center" {% if error %}aria-invalid="true" aria-describedby="e-code"{% endif %}>
+  </div>
+  {% if error %}<p id="e-code" class="err" role="alert">{{ error }}</p>{% endif %}
+  {% if note %}<p class="hint" role="status">{{ note }}</p>{% endif %}
+  <button class="btn fill" type="submit" {% if locked %}disabled{% endif %}>{{ L.v_go }}</button>
+</form>
+{% if can_resend %}
+<form method="post" action="/c/{{ clinic.slug }}/verify/{{ otc.public_id }}/resend"><button class="btn" type="submit">{{ L.v_resend }}</button></form>
+{% endif %}
+<a class="btn" href="/c/{{ clinic.slug }}/join">{{ L.v_other }}</a>
+{% endblock %}

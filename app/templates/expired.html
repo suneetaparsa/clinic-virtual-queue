@@ -1,0 +1,5 @@
+{% extends "patient_base.html" %}
+{% block content %}
+<p class="state s-left">{{ L.expired }}</p>
+<a class="btn fill" href="/c/{{ clinic.slug }}">{{ L.check_today }}</a>
+{% endblock %}

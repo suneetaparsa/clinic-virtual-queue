@@ -1,0 +1,216 @@
+{% extends "staff_base.html" %}
+{% set T = today %}
+{% set W = weekly %}
+{% macro fmt(metric, v) -%}
+{%- if metric == "wait" -%}{{ v|round|int }}{%- elif metric == "arrivals" -%}{{ "%.1f"|format(v) }}{%- else -%}{{ (v * 100)|round|int }}{%- endif -%}
+{%- endmacro %}
+{% macro delta(a, b, unit, higher_is_bad, digits) -%}
+{%- set diff = a - b -%}{%- set pct = (diff / b * 100) if b else 0 -%}
+{%- if pct|abs < 5 -%}<span class="small muted">about the same as other weekdays</span>
+{%- else -%}<span class="small {{ 'up' if (diff > 0) == higher_is_bad else 'down' }}"><b>{{ "+" if diff > 0 else "−" }}{{ ("%." ~ digits ~ "f")|format(diff|abs) }}{{ unit }}</b> vs other weekdays ({{ "+" if diff > 0 else "−" }}{{ pct|abs|round|int }}%)</span>{%- endif -%}
+{%- endmacro %}
+{% block content %}
+<header class="bar">
+  <div><b>Front desk · {{ clinic.name }}</b><div class="muted small">Clinic time <span class="mono">{{ clock_text(at) }}</span> · {{ clinic.providers_working }} providers working</div></div>
+  <div class="row">
+    {% if demo_mode %}<a class="btn small" href="/demo">Demo controls</a>{% endif %}
+    <a class="btn small" href="/staff?privacy={{ 0 if privacy else 1 }}">{{ "Show names" if privacy else "Privacy view" }}</a>
+    <a class="btn small" href="/staff/logout">Sign out</a>
+  </div>
+</header>
+
+{% if not clinic.accepting %}<div class="flash warn">New check-ins paused since {{ clock_text(clinic.paused_at) if clinic.paused_at else "earlier" }}. People already in line keep their place.</div>{% endif %}
+{% if msg %}<div class="flash ok" role="status">{{ msg }}</div>{% endif %}
+{% if err %}<div class="flash bad" role="alert">{{ err }}</div>{% endif %}
+
+<!-- A. Action bar -->
+<section class="panel" aria-label="Actions">
+  {% if ready %}
+  <div class="ready" role="alert">
+    <span>A room is free. Next checked-in patient: <span class="mono">{{ ready.line_id }}</span> {{ "" if privacy else ready.first_name }}</span>
+    <form method="post" action="/staff/entry/{{ ready.line_id }}/room"><button class="btn" type="submit">Call to room</button></form>
+  </div>
+  {% endif %}
+  <h2>Check in a patient</h2>
+  <form method="post" action="/staff/lookup" class="row" id="lookupForm">
+    <button class="btn fill" type="button" id="scanBtn">Scan patient's code</button>
+    <span class="muted">or</span>
+    <label for="query" class="muted small">Line ID</label>
+    <input id="query" name="query" class="mono" type="text" placeholder="K7-42" autocomplete="off" style="width:9em;text-transform:uppercase">
+    <button class="btn" type="submit">Look up</button>
+  </form>
+  <div id="scanner" hidden style="max-width:360px"></div>
+  {% if found %}
+  <div class="found">
+    <div class="who"><b>{{ found.first_name }}</b> · born {{ found.birth_year }}
+      <div class="muted small">Line ID <span class="mono">{{ found.line_id }}</span> · {{ STATUS_LABEL[found.status] }} · ask the patient to confirm name and birth year</div></div>
+    {% if found.status in ("waiting", "awaiting", "confirmed") %}
+    <form method="post" action="/staff/entry/{{ found.line_id }}/arrive"><button class="btn fill" type="submit">Mark arrived</button></form>
+    {% endif %}
+    <a class="btn" href="/staff">Close</a>
+  </div>
+  {% endif %}
+  <div class="row">
+    <form method="post" action="/staff/pause"><button class="btn small" type="submit">{{ "Resume new check-ins" if not clinic.accepting else "Pause new check-ins" }}</button></form>
+    <span class="muted small">Providers working</span>
+    <form method="post" action="/staff/providers"><input type="hidden" name="change" value="-1"><button class="btn small" type="submit" aria-label="One fewer provider">−</button></form>
+    <b class="mono">{{ clinic.providers_working }}</b>
+    <form method="post" action="/staff/providers"><input type="hidden" name="change" value="1"><button class="btn small" type="submit" aria-label="One more provider">+</button></form>
+  </div>
+</section>
+
+<!-- B. Today's line -->
+<section class="panel" aria-label="Today's line">
+  <h2>Today's line <span class="muted small">· {{ rows|length }} in line, {{ awaiting_count }} awaiting reply, {{ rooms|length }} in rooms</span></h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>#</th><th>Line ID</th>{% if not privacy %}<th>Name</th><th>Born</th>{% endif %}<th>Status</th><th>Estimate</th><th>Action</th></tr></thead>
+    <tbody>
+    {% for pos, e, est in rows %}
+      <tr>
+        <td>{{ pos }}</td><td class="mono">{{ e.line_id }}</td>
+        {% if not privacy %}<td>{{ e.first_name }}{% if not e.synthetic %} <span class="pill p-waiting">real</span>{% endif %}</td><td>{{ e.birth_year }}</td>{% endif %}
+        <td><span class="pill p-{{ e.status }}">{{ STATUS_LABEL[e.status] }}</span></td>
+        <td>{{ "at the desk" if e.status == "arrived" else ("under 10 min" if est.under_ten else est.lo ~ "–" ~ est.hi ~ " min") }}</td>
+        <td class="row">
+          {% if e.status in ("waiting", "awaiting", "confirmed") %}<form method="post" action="/staff/entry/{{ e.line_id }}/arrive"><button class="btn small" type="submit">Mark arrived</button></form>{% endif %}
+          {% if e.status == "arrived" %}<form method="post" action="/staff/entry/{{ e.line_id }}/room"><button class="btn small" type="submit">Call to room</button></form>{% endif %}
+          <form method="post" action="/staff/entry/{{ e.line_id }}/remove">
+            {% if arm == e.line_id %}<input type="hidden" name="confirm" value="yes"><button class="btn small danger" type="submit">Tap again to remove</button>
+            {% else %}<button class="btn small danger" type="submit">Remove</button>{% endif %}
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    {% for e in rooms %}
+      <tr><td>–</td><td class="mono">{{ e.line_id }}</td>{% if not privacy %}<td>{{ e.first_name }}</td><td>{{ e.birth_year }}</td>{% endif %}
+        <td><span class="pill p-in_room">In room</span></td><td>since {{ clock_text(e.room_at) }}</td>
+        <td><form method="post" action="/staff/entry/{{ e.line_id }}/complete"><button class="btn small" type="submit">Visit complete</button></form></td></tr>
+    {% endfor %}
+    {% if not rows and not rooms %}<tr><td colspan="7" class="muted">Nobody in line yet.</td></tr>{% endif %}
+    </tbody>
+  </table></div>
+</section>
+
+<div class="grid2">
+<!-- C. Today's dashboard -->
+<section class="panel" aria-label="Today's dashboard">
+  <h2>Today's dashboard <span class="muted small">· as of {{ clock_text(at) }}</span></h2>
+  <div class="tiles">
+    <div class="tile"><div class="k"><i style="background:var(--blue)"></i>Arrived at desk</div><div class="v">{{ T.arrived }}</div><div class="s">{{ T.at_desk_now }} waiting at the desk now</div></div>
+    <div class="tile"><div class="k"><i style="background:var(--heat)"></i>Consultation started</div><div class="v">{{ T.started }}</div><div class="s">{{ T.in_consult_now }} in consultation now</div></div>
+    <div class="tile"><div class="k"><i style="background:var(--accent)"></i>Consultation ended</div><div class="v">{{ T.ended }}</div><div class="s">since {{ clock_text(clinic.opens) }}</div></div>
+  </div>
+  <p class="small muted" style="margin:0">Median wait from desk to room: <b>{{ (T.median_desk_wait|round|int ~ " min") if T.median_desk_wait is not none else "–" }}</b> · Median consultation: <b>{{ (T.median_consult|round|int ~ " min") if T.median_consult is not none else "–" }}</b> · Left or removed: <b>{{ T.left_or_removed }}</b></p>
+  {% set cw = 58 %}{% set top = T.hourly_max %}
+  <svg viewBox="0 0 560 180" role="img" aria-label="Arrivals, consultations started and ended by hour">
+    {% for v in [0, top // 2, top] %}{% set y = 12 + 138 * (1 - v / top) %}
+      <line x1="30" x2="552" y1="{{ y }}" y2="{{ y }}" stroke="var(--line)"/><text x="24" y="{{ y + 4 }}" text-anchor="end">{{ v }}</text>
+    {% endfor %}
+    {% for h, a, b, c in T.hourly %}{% set x0 = 30 + loop.index0 * cw + (cw - 40) / 2 %}
+      {% for v, col in [(a, "var(--blue)"), (b, "var(--heat)"), (c, "var(--accent)")] %}{% if v %}
+        <rect x="{{ x0 + loop.index0 * 14 }}" y="{{ 12 + 138 * (1 - v / top) }}" width="12" height="{{ 138 * v / top }}" rx="2" fill="{{ col }}"><title>{{ A.hour_label(h) }}: {{ v }}</title></rect>
+      {% endif %}{% endfor %}
+      <text x="{{ 30 + loop.index0 * cw + cw / 2 }}" y="172" text-anchor="middle">{{ A.hour_label(h) }}</text>
+    {% endfor %}
+  </svg>
+</section>
+
+<!-- E. Accuracy -->
+<section class="panel" aria-label="Estimate accuracy">
+  <h2>Estimate accuracy <span class="muted small">· target 80% within ±20 minutes</span></h2>
+  {% if acc.count %}
+  <p style="margin:0"><b style="font-size:24px">{{ acc.within_pct }}%</b> within ±20 min · <b>{{ acc.median_miss|round|int }}</b> min median miss · <b>{{ acc.count }}</b> patients called today</p>
+  <div class="tablewrap"><table><thead><tr><th>Line ID</th><th>Estimated call</th><th>Actual call</th><th>Miss</th></tr></thead><tbody>
+    {% for lid, est_t, act_t, miss in acc.rows %}
+    <tr><td class="mono">{{ lid }}</td><td>{{ clock_text(est_t) }}</td><td>{{ clock_text(act_t) }}</td>
+      <td class="{{ 'down' if miss|abs <= 20 else 'up' }}"><b>{{ "+" if miss >= 0 else "−" }}{{ miss|abs|round|int }} min</b></td></tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted" style="margin:0">Appears once patients who joined today are called into rooms.</p>{% endif %}
+</section>
+</div>
+
+<!-- D. Weekly pattern -->
+<section class="panel" id="weekly" aria-label="Weekly pattern">
+  <h2>Weekly pattern <span class="muted small">· last 8 weeks{% if demo_mode %} (synthetic history){% endif %}</span></h2>
+  <div class="row">
+    <div class="seg" role="group" aria-label="Measure">
+      {% for key, (label, unit) in A.METRICS.items() %}<a href="/staff?metric={{ key }}&d={{ W.sel[0] }}&h={{ W.sel[1] }}#weekly" aria-current="{{ 'true' if W.metric == key else 'false' }}">{{ label }}</a>{% endfor %}
+    </div>
+    <span class="muted small">Tap a cell to see what drives it.</span>
+  </div>
+  <div class="tablewrap" style="border:0">
+  <table class="heat" style="min-width:520px">
+    <thead><tr><th></th>{% for h in A.HOURS %}<th>{{ A.hour_label(h) }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for dname in A.DAYS %}{% set d = loop.index0 %}
+      <tr><th style="text-align:left;color:var(--ink);font-weight:700">{{ dname }}</th>
+      {% for h in A.HOURS %}{% set v = W.grid[(d, h)] %}{% set t = ((v - W.lo) / (W.hi - W.lo)) if W.hi > W.lo else 0 %}
+        <td><a href="/staff?metric={{ W.metric }}&d={{ d }}&h={{ h }}#weekly" aria-current="{{ 'true' if W.sel == (d, h) else 'false' }}"
+          aria-label="{{ A.DAYS_FULL[d] }} {{ A.hour_label(h) }}: {{ fmt(W.metric, v) }} {{ A.METRICS[W.metric][1] }}"
+          style="background:color-mix(in srgb, var(--heat) {{ (8 + t * 92)|round|int }}%, var(--card));color:{{ 'var(--card)' if t > 0.55 else 'var(--ink)' }}">{{ fmt(W.metric, v) }}</a></td>
+      {% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if W.cell %}
+  {% set c = W.cell %}{% set p = W.peers %}
+  <p style="margin:0;max-width:75ch;font-size:16px">{{ W.finding }}</p>
+  <div class="cmp">
+    <div><div class="small muted">Average wait</div><div class="v">{{ c.wait|round|int }} min</div>{{ delta(c.wait, p.wait, " min", true, 0) }}</div>
+    <div><div class="small muted">Arrivals per hour</div><div class="v">{{ "%.1f"|format(c.arrivals) }}</div>{{ delta(c.arrivals, p.arrivals, "", true, 1) }}</div>
+    <div><div class="small muted">Providers on duty</div><div class="v">{{ "%.1f"|format(c.providers) }}</div>{{ delta(c.providers, p.providers, "", false, 1) }}</div>
+    <div><div class="small muted">Consultation length</div><div class="v">{{ c.consult|round|int }} min</div>{{ delta(c.consult, p.consult, " min", true, 0) }}</div>
+  </div>
+  <p class="small muted" style="margin:0">{{ A.DAYS_FULL[W.sel[0]] }} {{ A.hour_label(W.sel[1]) }} week by week: bars = average wait (minutes), dashed line = same hour on other weekdays, bottom row = providers on duty.</p>
+  {% set n = W.per_week|length %}{% set cw = (560 - 40) / n %}
+  {% set ymax = [20] + W.per_week|map(attribute=1)|map(attribute="wait")|list + W.per_week|map(attribute=2)|list %}
+  {% set top = (((ymax|max) / 10)|round(0, "ceil") * 10)|int %}
+  <svg viewBox="0 0 560 200" role="img" aria-label="Weekly average wait for the selected hour" style="max-width:620px">
+    {% for v in [0, top // 2, top] %}{% set y = 14 + 140 * (1 - v / top) %}
+      <line x1="34" x2="552" y1="{{ y }}" y2="{{ y }}" stroke="var(--line)"/><text x="28" y="{{ y + 4 }}" text-anchor="end">{{ v }}</text>
+    {% endfor %}
+    {% set pts = [] %}
+    {% for wk, st, peer in W.per_week %}{% set x = 34 + loop.index0 * cw %}
+      <rect x="{{ x + cw * 0.22 }}" y="{{ 14 + 140 * (1 - st.wait / top) }}" width="{{ cw * 0.56 }}" height="{{ 140 * st.wait / top }}" rx="3" fill="var(--heat)"><title>Week of {{ A.short_date(wk) }}: {{ st.wait|round|int }} min, {{ st.providers|round|int }} providers</title></rect>
+      <text x="{{ x + cw / 2 }}" y="170" text-anchor="middle">{{ A.short_date(wk) }}</text>
+      <text x="{{ x + cw / 2 }}" y="190" text-anchor="middle" style="font-weight:700;fill:{{ 'var(--red)' if W.change_week and loop.index0 >= W.change_week else 'var(--ink)' }}">{{ st.providers|round|int }}</text>
+      {% set _ = pts.append((x + cw / 2)|string ~ "," ~ (14 + 140 * (1 - peer / top))|string) %}
+    {% endfor %}
+    <polyline fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="4 3" points="{{ pts|join(' ') }}"/>
+    <text x="0" y="190" text-anchor="start">Providers</text>
+    {% if W.change_week %}<line x1="{{ 34 + W.change_week * cw }}" x2="{{ 34 + W.change_week * cw }}" y1="14" y2="160" stroke="var(--red)" stroke-dasharray="3 3"/>{% endif %}
+  </svg>
+  {% else %}<p class="muted">{{ W.finding }}</p>{% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
+<script>
+(function () {
+  // Refresh every 15 seconds so the line stays current, unless staff are typing or reading a patient card.
+  var busy = function () {
+    var a = document.activeElement;
+    return (a && a.tagName === "INPUT") || document.querySelector(".found") || !document.getElementById("scanner").hidden;
+  };
+  setInterval(function () { if (!busy()) location.reload(); }, 15000);
+
+  var btn = document.getElementById("scanBtn"), box = document.getElementById("scanner"), scanner = null;
+  btn.addEventListener("click", function () {
+    if (!window.Html5Qrcode) { alertBox("Camera scanning is not available here. Type the line ID instead."); return; }
+    box.hidden = false; box.id = "scanner";
+    scanner = new Html5Qrcode("scanner");
+    scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 220 }, function (text) {
+      scanner.stop().catch(function () {});
+      document.getElementById("query").value = text;
+      document.getElementById("lookupForm").submit();
+    }).catch(function () { box.hidden = true; alertBox("Camera is off. Type the line ID instead."); document.getElementById("query").focus(); });
+  });
+  function alertBox(t) {
+    var p = document.createElement("p"); p.className = "flash bad"; p.setAttribute("role", "alert"); p.textContent = t;
+    document.getElementById("lookupForm").after(p);
+  }
+})();
+</script>
+{% endblock %}

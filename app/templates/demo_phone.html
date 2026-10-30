@@ -1,0 +1,44 @@
+{% extends "staff_base.html" %}
+{% block title %}Demo phone{% endblock %}
+{% block content %}
+<section class="panel" style="max-width:440px;width:100%;margin:0 auto">
+  <header class="bar"><div><b>Demo phone</b><div class="muted small">Texts to and from {{ clinic.name }} · {{ clinic.phone_display }}</div></div></header>
+  {% if not digits %}
+  <form method="post" action="/demo/phone/number" class="row" style="flex-direction:column;align-items:stretch">
+    <label for="number"><b>Which phone number is this?</b></label>
+    <input id="number" name="number" type="tel" placeholder="(555) 010-4477" autofocus>
+    <button class="btn fill" type="submit">Use this number</button>
+    <p class="muted small" style="margin:0">Use a made-up number. Each browser keeps its own number, so a phone and a laptop can be two different patients.</p>
+  </form>
+  {% else %}
+  <div class="row" style="justify-content:space-between"><span>This phone: <b class="mono">{{ pretty }}</b></span>
+    <form method="post" action="/demo/phone/number"><button class="btn small" type="submit">Change number</button></form></div>
+  <div id="thread" style="display:flex;flex-direction:column;gap:8px;min-height:240px;max-height:55vh;overflow-y:auto;background:var(--sunk);border-radius:12px;padding:10px">
+    {% for m in thread %}
+      <div style="max-width:86%;padding:8px 11px;border-radius:14px;{{ 'align-self:flex-end;background:var(--accent);color:var(--accent-ink)' if m.direction == 'out' else 'align-self:flex-start;background:var(--card)' }}">{{ m.body }}<div class="small" style="opacity:.7">{{ clock_text(m.at) }}</div></div>
+    {% else %}
+      <p class="muted" style="margin:auto;text-align:center">No messages yet. Text WAIT to see the current wait, or JOIN to get in line. Spanish: ESPERA, UNIRSE, SALIR.</p>
+    {% endfor %}
+    <span id="end"></span>
+  </div>
+  {% if awaiting %}<form method="post" action="/demo/phone/call"><button class="btn" type="submit" style="width:100%">Call {{ clinic.phone_display }} and press 1</button></form>{% endif %}
+  <div class="row">
+    {% for c in (["Y", "N", "WAIT"] if awaiting else (["WAIT", "LEAVE"] if in_line else ["WAIT", "JOIN", "ESPERA"])) %}
+    <form method="post" action="/demo/phone/send"><input type="hidden" name="body" value="{{ c }}"><button class="btn small" type="submit">{{ c }}</button></form>
+    {% endfor %}
+  </div>
+  <form method="post" action="/demo/phone/send" class="row">
+    <label for="body" class="muted small" style="position:absolute;left:-9999px">Message</label>
+    <input id="body" name="body" type="text" autocomplete="off" placeholder="Text WAIT, JOIN or LEAVE" style="flex:1;min-width:0">
+    <button class="btn fill" type="submit">Send</button>
+  </form>
+  {% endif %}
+  <p class="muted small" style="margin:0"><a href="/c/{{ clinic.slug }}">Patient page</a> · <a href="/demo">Demo controls</a></p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+var t = document.getElementById("thread"); if (t) t.scrollTop = t.scrollHeight;
+setInterval(function () { var a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.value)) location.reload(); }, 8000);
+</script>
+{% endblock %}

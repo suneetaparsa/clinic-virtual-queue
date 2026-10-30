@@ -1,0 +1,36 @@
+{% extends "patient_base.html" %}
+{% block refresh %}<meta http-equiv="refresh" content="{{ refresh }}">{% endblock %}
+{% block content %}
+<div class="status">{{ phase_text }}</div>
+
+{% if mine %}
+<section class="card primary" aria-live="polite">
+  <span class="k">{{ L.your_wait }} · <span class="qid" style="font-size:15px">{{ mine.line_id }}</span></span>
+  <span class="v">{{ L.under_ten if mine.est.under_ten else mine.est.lo ~ "–" ~ mine.est.hi }} <small>{{ L.min }}</small></span>
+</section>
+<a class="btn fill" href="/q/{{ mine.token }}">{{ L.see_place }}</a>
+<section class="card secondary">
+  <span class="k">{{ L.est_join_now if can_join else L.est_no_join }}</span>
+  <span class="v">{{ L.under_ten if general.under_ten else general.lo ~ "–" ~ general.hi }} <small>{{ L.min }}</small></span>
+  <span class="sub">{{ L.people_waiting_one if waiting == 1 else L.people_waiting.format(n=waiting) }}</span>
+</section>
+{% elif show_wait %}
+<section class="card primary" aria-live="polite">
+  <span class="k">{{ L.est_join_now if can_join else L.est_no_join }}</span>
+  <span class="v">{{ L.under_ten if general.under_ten else general.lo ~ "–" ~ general.hi }} <small>{{ L.min }}</small></span>
+  <span class="sub">{{ L.people_waiting_one if waiting == 1 else L.people_waiting.format(n=waiting) }}</span>
+</section>
+{% else %}
+<section class="card primary">
+  <span class="k">{{ L.join_k }}</span>
+  <span class="v" style="font-size:28px">{{ L.join_opens.format(**words) }}</span>
+  <span class="sub">{{ L.hours_note.format(**words) }}</span>
+</section>
+{% endif %}
+
+{% if not mine and can_join %}
+  {% if full %}<p class="err">{{ L.line_full }}</p>
+  {% else %}<a class="btn fill" href="/c/{{ clinic.slug }}/join">{{ L.join }}</a>{% endif %}
+{% endif %}
+<p class="fine">{{ L.updated.format(t=now_text) }}</p>
+{% endblock %}

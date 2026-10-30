@@ -1,0 +1,52 @@
+{% extends "staff_base.html" %}
+{% block title %}Demo controls · Sunrise{% endblock %}
+{% block content %}
+<header class="bar">
+  <div><b>Demo controls</b><div class="muted small">Simulated clinic day. Synthetic patients and health record feed. No real texts are sent.</div></div>
+  <div class="row"><a class="btn small" href="/staff">Front desk</a><a class="btn small" href="/c/{{ clinic.slug }}">Patient page</a><a class="btn small" href="/demo/phone">Demo phone</a></div>
+</header>
+
+<section class="panel">
+  <h2>Clinic clock</h2>
+  <p style="margin:0;font-size:28px" class="mono">{{ clock_text(at) }} <span class="muted small" style="font-family:inherit">· {{ "running" if clock.running else "paused" }} at {{ clock.speed|int }}× · {{ phase }}</span></p>
+  <div class="row">
+    {% for v in [1, 10, 30, 60] %}
+    <form method="post" action="/demo/speed"><input type="hidden" name="value" value="{{ v }}"><button class="btn small {{ 'fill' if clock.speed|int == v else '' }}" type="submit">{{ v }}×</button></form>
+    {% endfor %}
+    <form method="post" action="/demo/run"><input type="hidden" name="running" value="{{ 0 if clock.running else 1 }}"><button class="btn small" type="submit">{{ "Pause" if clock.running else "Play" }}</button></form>
+    <form method="post" action="/demo/skip"><input type="hidden" name="minutes" value="10"><button class="btn small" type="submit">Skip 10 min</button></form>
+  </div>
+  <h2>Restart the day</h2>
+  <form method="post" action="/demo/reset" class="row">
+    <label for="start" class="muted small">Start at</label>
+    <select id="start" name="start" class="btn small">
+      {% for key, (label, t) in starts.items() %}<option value="{{ key }}" {% if request.query_params.get('start') == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    {% if request.query_params.get("confirm_reset") %}
+      <input type="hidden" name="confirm" value="yes"><button class="btn small danger" type="submit">Tap again to restart (clears everyone in line)</button>
+    {% else %}<button class="btn small" type="submit">Restart</button>{% endif %}
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Open it on your phone</h2>
+  <p style="margin:0">Connect your phone to the same Wi-Fi as this computer, then open one of these addresses on the phone:</p>
+  {% if addresses %}
+  <ul>{% for a in addresses %}<li><b class="mono">{{ a }}/c/{{ clinic.slug }}</b> (patient page) · <span class="mono">{{ a }}/demo/phone</span> (demo phone)</li>{% endfor %}</ul>
+  {% else %}<p class="flash warn">Could not find this computer's Wi-Fi address. Run <span class="mono">ipconfig</span> (Windows) or <span class="mono">ipconfig getifaddr en0</span> (Mac) and use that address with port 8000.</p>{% endif %}
+  <p class="muted small" style="margin:0">If the phone cannot connect, allow Python through the computer's firewall for private networks and check the server was started with <span class="mono">--host 0.0.0.0</span>. Camera scanning on the front desk works on this computer at <span class="mono">http://localhost:8000/staff</span>.</p>
+</section>
+
+<section class="panel">
+  <h2>Suggested script</h2>
+  <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px">
+    <li>Phone: open the patient page and read the wait. Then open the demo phone in another tab, enter a phone number such as (555) 010-4477, and text WAIT.</li>
+    <li>Phone: tap Join the line with the same number. The 4-digit code arrives on the demo phone; enter it to get the line ID and code.</li>
+    <li>Laptop: set the clock to 30× and watch the front desk. When the confirmation text arrives, reply Y on the demo phone.</li>
+    <li>Laptop: scan the phone's code (or type the line ID), tap Mark arrived, then Call to room when the green banner appears.</li>
+    <li>Privacy check: on the laptop, open the patient page in a private window and try to join with the phone's number. The page asks for a code and reveals nothing.</li>
+  </ol>
+  {% if sample %}<p class="muted small" style="margin:0">Synthetic patients in line now (for the privacy check): {% for lid, name, phone in sample %}<span class="mono">{{ lid }}</span> {{ name }} {{ phone }}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+  <p class="muted small" style="margin:0">Web join one-time code: <b>{{ "on" if one_time_code else "off (shows the privacy leak)" }}</b>. Change with the JOIN_ONE_TIME_CODE setting.</p>
+</section>
+{% endblock %}
