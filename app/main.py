@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
     init_db()
     if settings.demo_mode:
         qs.runtime.clock = SimulatedClock(DEMO_START, settings.demo_speed)
-        reset_demo()
+        reset_demo(settings.demo_start_at)
     else:
         qs.runtime.clock = Clock()
         _ensure_clinic()

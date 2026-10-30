@@ -40,6 +40,25 @@ Then open:
 
 Each start of the server begins a fresh demo day at 8:15 AM on Friday, Oct 30, 2026, with the clock running at 10x.
 
+### Test while the clinic is closed
+
+Start the server with the clinic closed:
+
+```bash
+# macOS/Linux
+DEMO_START_AT=after python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Windows PowerShell
+$env:DEMO_START_AT="after"; python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+| `DEMO_START_AT` | Clinic time | What to check |
+| --- | --- | --- |
+| `early` | 7:00 AM | "Closed now · the line opens at 7:30 AM", no Join button, JOIN or WAIT by text gets a closed reply. Leave the clock running: at 7:30 joining opens, and estimates include the wait until doctors start at 8:00 |
+| `late` | 4:20 PM | Joining still works until 4:30 PM; after that only people already in line see a wait |
+| `after` | 5:05 PM Friday | "Closed for today · opens Monday at 8:00 AM"; texts say you can join Monday from 7:30 AM |
+
+You can also switch while the server is running: open http://localhost:8000/demo, pick a time under "Restart the day", and tap Restart twice.
+
 ## Use your phone and laptop together
 
 1. Connect the phone to the same Wi-Fi as the laptop.
@@ -57,10 +76,11 @@ Every browser keeps its own patient cookie and its own demo phone number, so the
 
 ## Settings
 
-Copy `.env.example` to `.env` or set environment variables. Main ones:
+Copy `.env.example` to `.env` and start the server with `--env-file .env` (for example `python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --env-file .env`), or set environment variables. Main ones:
 
 | Setting | Default | Notes |
 | --- | --- | --- |
+| `DEMO_START_AT` | `morning` | `early`, `late` or `after` starts the demo day with the clinic closed or closing |
 | `DEMO_MODE` | `true` | `false` turns off the simulator, demo phone and demo pages and uses the real clock |
 | `JOIN_ONE_TIME_CODE` | `true` | `false` restores the old flow, which shows the "already in line" privacy leak; demo use only |
 | `SECRET_KEY`, `PHONE_ENCRYPTION_KEY`, `STAFF_PIN` | demo values | must be set in production |

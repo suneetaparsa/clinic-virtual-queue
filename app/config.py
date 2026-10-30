@@ -28,6 +28,8 @@ class Settings:
     # Demo mode: simulated clock, synthetic patients, on-screen "demo phone" for texts.
     demo_mode: bool = field(default_factory=lambda: _bool("DEMO_MODE", True))
     demo_speed: float = field(default_factory=lambda: float(os.getenv("DEMO_SPEED", "10")))
+    # Where the demo day starts: morning (8:15 AM), early (7:00 AM, closed), late (4:20 PM), after (5:05 PM, closed).
+    demo_start_at: str = field(default_factory=lambda: os.getenv("DEMO_START_AT", "morning"))
 
     # Join protection: text a one-time code before a web join completes.
     join_one_time_code: bool = field(default_factory=lambda: _bool("JOIN_ONE_TIME_CODE", True))
